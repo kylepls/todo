@@ -1,0 +1,56 @@
+---
+description: Use Yarn exclusively for package management in this project
+globs: **/*.{json,js,ts,jsx,tsx,md}
+alwaysApply: true
+---
+
+# Package Manager: Yarn Only
+
+## Context
+- When working with JavaScript/TypeScript dependencies
+- When installing packages
+- When modifying package.json
+- When creating or updating scripts
+
+## Requirements
+- Use Yarn for all package management operations
+- Never use npm commands in scripts or documentation
+- Use yarn.lock for dependency locking, not package-lock.json
+- Use Yarn workspaces for monorepo management if needed
+- Document all scripts using Yarn syntax in README and documentation
+- Configure CI/CD to use Yarn for building and testing
+
+## Examples
+<example>
+# Installing dependencies
+yarn install
+
+# Adding a package
+yarn add react
+
+# Adding a dev dependency
+yarn add -D typescript
+
+# Running scripts
+yarn dev
+yarn build
+yarn test
+</example>
+
+<example type="invalid">
+# Never use npm
+npm install
+npm run dev
+npm i react
+
+# Don't use npx
+npx create-react-app my-app
+</example>
+
+## Critical Rules
+- Always use `yarn` for all package management operations
+- Never use `npm` or `npx` commands
+- Always use `yarn add` instead of `npm install`
+- Never commit package-lock.json to the repository
+- Always use `yarn` for running scripts defined in package.json
+- Never use global npm installations, prefer `yarn global add` 

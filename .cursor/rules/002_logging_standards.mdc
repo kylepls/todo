@@ -1,0 +1,40 @@
+---
+description: Use structured logfmt-style logging without emojis for consistent, parseable output
+globs: src/**/*.ts
+alwaysApply: true
+---
+
+# Logging Standards
+
+## Context
+- When writing console.log, console.error, console.warn statements
+- When adding debug or informational output
+- When logging application events or errors
+
+## Requirements
+- Use hybrid format: readable message + key=value pairs for data
+- NO emojis in any log messages
+- Include relevant context as key=value pairs
+- Use consistent log levels (info, error, warn, debug)
+- Keep messages human-readable and actionable
+- Include service=, error=, count=, etc. for structured data
+
+## Examples
+<example>
+console.log('Starting email processing count=5 status=started');
+console.log('Connected to Gmail service=gmail status=success');
+console.error('Failed to create transaction error="Invalid amount" id=123 status=failed');
+</example>
+
+<example type="invalid">
+console.log('🚀 Starting email processing...');
+console.log('✅ Successfully processed emails');
+console.error('❌ Failed to connect to Gmail');
+</example>
+
+## Critical Rules
+- NEVER use emojis in log messages
+- Use hybrid format: readable message + key=value pairs for data
+- Include service= to identify the component
+- Include error=, count=, status= for relevant data
+- Quote values that contain spaces or special characters

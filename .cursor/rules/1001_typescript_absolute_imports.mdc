@@ -1,0 +1,49 @@
+---
+description: Use absolute imports in TypeScript files to improve maintainability and readability
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TypeScript Absolute Imports
+
+## Context
+- When importing modules in TypeScript files
+- When refactoring or moving files between directories
+- When creating new components or modules
+- When managing dependencies across the project
+
+## Requirements
+- Use absolute imports from project root instead of relative imports
+- Configure TypeScript paths in tsconfig.json for module resolution
+- Organize imports by external dependencies first, then absolute internal imports
+- Use consistent naming for import aliases that reflect project structure
+- Avoid deep relative imports (../../..)
+- Use consistent import style across the entire codebase
+
+## Examples
+<example>
+// Good: Using absolute imports
+import { Button } from '@/components/ui/Button';
+import { formatDate } from '@/utils/date';
+import { useAuth } from '@/hooks/useAuth';
+</example>
+
+<example type="invalid">
+// Bad: Using relative imports
+import { Button } from '../../components/ui/Button';
+import { formatDate } from '../../../utils/date';
+import { useAuth } from '../../../../hooks/useAuth';
+</example>
+
+## AI Optimization
+- Automatically refactor imports to absolute format when editing files
+- Suggest appropriate path aliases based on project structure
+- Maintain consistent import ordering in files
+- Validate that imports follow the absolute pattern
+
+## Critical Rules
+- Always use absolute imports starting with project root alias (@/, src/, etc.)
+- Never use relative imports that navigate up multiple directory levels
+- Always maintain consistent import ordering (external libs first, then internal)
+- Never mix absolute and relative import styles in the same file
+- Always ensure tsconfig.json properly configures path aliases for absolute imports 
