@@ -1,74 +1,43 @@
 "use client"
 
+import { CompletionChart } from "@/components/CompletionChart"
+import { TodoCard } from "@/components/TodoCard"
+import { TodoDetail } from "@/components/TodoDetail"
 import { useTodos } from "@/contexts/TodoContext"
 import { Todo, TodoPriority, TodoStatus } from "@/lib/entities/Todo"
-import { searchTodos } from "@/utils/todoSearch"
-import { Autocomplete, Badge, Button, Card, Container, Group, Select, Stack, Switch, Text, Title } from "@mantine/core"
+import { TodoSearchManager } from "@/utils/TodoSearchManager"
+import { parseTodoListDates, parseTodoDates } from "@/utils/dateParser"
+import { Autocomplete, Button, Card, Container, Group, Stack, Text } from "@mantine/core"
+import { modals } from "@mantine/modals"
 import { notifications } from "@mantine/notifications"
-import dayjs from "dayjs"
-import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-
-interface CompletionData {
-  date: string;
-  count: number;
-}
-
-const statusColors: Record<TodoStatus, string> = {
-  "Created": "gray",
-  "Pending": "blue",
-  "Work in progress": "yellow",
-  "Blocked by": "red",
-  "Completed": "green",
-}
-
-const priorityColors: Record<TodoPriority, string> = {
-  "Low": "gray",
-  "Medium": "blue",
-  "High": "orange",
-  "Critical": "red",
-}
+import React, { useCallback, useEffect, useMemo, useState } from "react"
+import { Virtuoso } from "react-virtuoso"
+import moment from "moment"
 
 export default function Home() {
-  const router = useRouter()
-  const { todos, setTodos: setContextTodos } = useTodos()
-  const [completionData, setCompletionData] = useState<CompletionData[]>([])
-  const [searchInput, setSearchInput] = useState("")
+  const { todos, setTodos } = useTodos()
   const [isLoading, setIsLoading] = useState(true)
-  const [showCompleted, setShowCompleted] = useState(false)
 
-  const setTodos = (newTodos: Todo[]) => {
-    setContextTodos(newTodos)
-  }
+  const [searchInput, setSearchInput] = useState("")
 
   const loadData = async () => {
-    const [todosRes, statsRes] = await Promise.all([
-      fetch("/api/todos", { cache: "no-store" }),
-      fetch("/api/stats/completion?days=7", { cache: "no-store" }),
-    ])
-
+    const todosRes = await fetch("/api/todos", { cache: "no-store" })
     const todosData = await todosRes.json()
-    const statsData = await statsRes.json()
 
-    setTodos(todosData)
-    setCompletionData(statsData)
+    setTodos(parseTodoListDates(todosData))
     setIsLoading(false)
   }
 
   useEffect(() => {
     const cachedTodos = localStorage.getItem("todos")
-    const cachedStats = localStorage.getItem("completionStats")
 
-    if (cachedTodos && cachedStats) {
-      setTodos(JSON.parse(cachedTodos))
-      setCompletionData(JSON.parse(cachedStats))
+    if (cachedTodos) {
+      setTodos(parseTodoListDates(JSON.parse(cachedTodos)))
       setIsLoading(false)
     }
 
     loadData().then(() => {
       localStorage.setItem("todos", JSON.stringify(todos))
-      localStorage.setItem("completionStats", JSON.stringify(completionData))
     })
   }, [])
 
@@ -77,147 +46,200 @@ export default function Home() {
       return
     }
 
-    const res = await fetch("/api/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: searchInput }),
-    })
+    const title = searchInput.trim()
+    const tempId = -Date.now()
 
-    const newTodo = await res.json()
-    setTodos([newTodo, ...todos])
-    setSearchInput("")
+    const optimisticTodo: Todo = {
+      id: tempId,
+      title,
+      description: "",
+      status: "Created",
+      priority: "Medium",
+      need_by_date: null,
+      blocked_by_id: null,
+      completed_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      comments: [],
+    }
 
-    localStorage.setItem("todos", JSON.stringify([newTodo, ...todos]))
+    setTodos([optimisticTodo, ...todos])
+    setSearchInput("is:open sort:!created,priority")
 
-    notifications.show({
-      title: "Todo created",
-      message: "Your todo has been created successfully",
-      color: "green",
-    })
-  }
+    try {
+      const res = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
 
-  const updateTodoStatus = async (id: number, status: TodoStatus) => {
-    const completedAt = status === "Completed" ? new Date().toISOString() : null
+      if (!res.ok) {
+        throw new Error(`Failed to create todo: ${res.statusText}`)
+      }
 
-    const res = await fetch(`/api/todos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, completed_at: completedAt }),
-    })
+      const newTodo = parseTodoDates(await res.json())
 
-    const updatedTodo = await res.json()
-    const newTodos = todos.map(t => t.id === id ? updatedTodo : t)
-    setTodos(newTodos)
+      setTodos(prevTodos => {
+        const updatedTodos = prevTodos.map(t => t.id === tempId ? newTodo : t)
+        localStorage.setItem("todos", JSON.stringify(updatedTodos))
+        return updatedTodos
+      })
 
-    localStorage.setItem("todos", JSON.stringify(newTodos))
+      notifications.show({
+        title: "Todo created",
+        message: "Your todo has been created successfully",
+        color: "green",
+      })
+    } catch (error) {
+      setTodos(prevTodos => prevTodos.filter(t => t.id !== tempId))
 
-    if (status === "Completed") {
-      loadData()
+      modals.open({
+        title: "Failed to create todo",
+        children: (
+          <Text size="sm">
+            There was an error creating your todo. Please try again.
+          </Text>
+        ),
+      })
     }
   }
 
-  const updateTodoPriority = async (id: number, priority: TodoPriority) => {
-    const res = await fetch(`/api/todos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priority }),
+  const updateTodoStatus = useCallback(async (id: number, status: TodoStatus) => {
+    const completedAt = status === "Completed" ? moment().toISOString() : null
+
+    let previousTodo: Todo | undefined
+    setTodos((prevTodos: Todo[]) => {
+      previousTodo = prevTodos.find(t => t.id === id)
+      return prevTodos.map((t: Todo) =>
+        t.id === id ? { ...t, status, completed_at: completedAt } : t
+      )
     })
 
-    const updatedTodo = await res.json()
-    const newTodos = todos.map(t => t.id === id ? updatedTodo : t)
-    setTodos(newTodos)
+    try {
+      const res = await fetch(`/api/todos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, completed_at: completedAt }),
+      })
 
-    localStorage.setItem("todos", JSON.stringify(newTodos))
-  }
+      if (!res.ok) {
+        throw new Error(`Failed to update status: ${res.statusText}`)
+      }
 
-  const chartData = Array.from({ length: 7 }, (_, i) => {
-    const date = dayjs().subtract(6 - i, "day").format("YYYY-MM-DD")
-    const dataPoint = completionData.find(d => d.date === date)
-    return {
-      date: dayjs(date).format("MMM D"),
-      count: dataPoint?.count || 0,
+      const updatedTodo: Todo = await res.json()
+      setTodos((prevTodos: Todo[]) => {
+        const newTodos = prevTodos.map((t: Todo) => t.id === id ? updatedTodo : t)
+        localStorage.setItem("todos", JSON.stringify(newTodos))
+        return newTodos
+      })
+    } catch (error) {
+      if (previousTodo) {
+        setTodos((prevTodos: Todo[]) =>
+          prevTodos.map((t: Todo) => t.id === id ? previousTodo! : t)
+        )
+      }
+
+      modals.open({
+        title: "Failed to update status",
+        children: (
+          <Text size="sm">
+            There was an error updating the status. Please try again.
+          </Text>
+        ),
+      })
     }
-  })
+  }, [])
 
-  const isSearching = searchInput.trim().length > 0
-  const hasSearchOperators = /status:|priority:|after:|before:|title:|comment:|description:/.test(searchInput)
+  const updateTodoPriority = useCallback(async (id: number, priority: TodoPriority) => {
+    console.log(`updateTodoPriority called id=${id} priority=${priority}`)
 
-  const filteredTodos = searchTodos(todos, searchInput).filter(todo =>
-    isSearching || showCompleted || todo.status !== "Completed"
-  )
+    let previousTodo: Todo | undefined
+    setTodos((prevTodos: Todo[]) => {
+      previousTodo = prevTodos.find(t => t.id === id)
+      return prevTodos.map((t: Todo) => t.id === id ? { ...t, priority } : t)
+    })
+
+    try {
+      const res = await fetch(`/api/todos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`Failed to update priority: ${res.statusText}`)
+      }
+
+      const updatedTodo: Todo = await res.json()
+      setTodos((prevTodos: Todo[]) => {
+        const newTodos = prevTodos.map((t: Todo) => t.id === id ? updatedTodo : t)
+        localStorage.setItem("todos", JSON.stringify(newTodos))
+        return newTodos
+      })
+    } catch (error) {
+      if (previousTodo) {
+        setTodos((prevTodos: Todo[]) =>
+          prevTodos.map((t: Todo) => t.id === id ? previousTodo! : t)
+        )
+      }
+
+      modals.open({
+        title: "Failed to update priority",
+        children: (
+          <Text size="sm">
+            There was an error updating the priority. Please try again.
+          </Text>
+        ),
+      })
+    }
+  }, [])
+
+  const todosById = useMemo(() => {
+    if (!todos) return new Map<number, Todo>()
+    const cache = new Map<number, Todo>()
+    todos.forEach(todo => {
+      cache.set(todo.id, todo)
+    })
+    return cache
+  }, [todos])
+
+  const itemWrapperStyle = useMemo(() => ({ marginBottom: "12px" }), [])
+
+  const handleNavigate = useCallback((id: number) => {
+    setSearchInput(`id:${id}`)
+  }, [])
+
+  const handleBackFromDetail = useCallback(() => {
+    setSearchInput("is:open sort:!created,priority")
+  }, [])
+
+  const renderTodoItem = useCallback((index: number, todoId: number) => {
+    const todo = todosById.get(todoId)!
+    return (
+      <div style={itemWrapperStyle}>
+        <TodoCard
+          todo={todo}
+          onStatusChange={updateTodoStatus}
+          onPriorityChange={updateTodoPriority}
+          onNavigate={handleNavigate}
+        />
+      </div>
+    )
+  }, [todosById, updateTodoStatus, updateTodoPriority, handleNavigate, itemWrapperStyle])
+
+  const filteredAndSortedTodoIds = useMemo(() => {
+    return TodoSearchManager.filterAndSortTodos(todos, searchInput)
+  }, [todos, searchInput])
 
   const autocompleteOptions = useMemo(() => {
-    const input = searchInput.toLowerCase()
-    const lastWord = input.split(/\s+/).pop() || ""
-
-    function addBangs(options: string[]): string[] {
-      return [
-        ...options,
-        ...options.map(it => it.substring(0, it.indexOf(":")) + ":!" + it.substring(it.indexOf(":") + 1))
-      ]
-    }
-
-    function computeOptions() {
-      if (!lastWord.includes(":")) {
-        return []
-      }
-
-      const statusValues = addBangs(["status:open", "status:created", "status:pending", "status:wip", "status:blocked", "status:completed"])
-      const priorityValues = addBangs(["priority:low", "priority:medium", "priority:high", "priority:critical"])
-
-      if (lastWord.startsWith("status:")) {
-        if (lastWord === "status:") {
-          return statusValues
-        }
-        return statusValues.filter(v => v.replace("!", "").startsWith(lastWord))
-      }
-
-      if (lastWord.startsWith("priority:")) {
-        if (lastWord === "priority:") {
-          return priorityValues
-        }
-        return priorityValues.filter(v => v.replace("!", "").startsWith(lastWord))
-      }
-
-      if (lastWord.startsWith("title:")) {
-        return ["title:", "title:!\"text\"", "title:word"]
-      }
-
-      if (lastWord.startsWith("description:")) {
-        return ["description:", "description:!\"text\"", "description:word"]
-      }
-
-      if (lastWord.startsWith("comment:")) {
-        return ["comment:", "comment:!\"text\"", "comment:word"]
-      }
-
-      if (lastWord.startsWith("after:")) {
-        const today = new Date().toISOString().split("T")[0]
-        return [`after:${today}`, "after:2024-01-01", "after:2024"]
-      }
-
-      if (lastWord.startsWith("before:")) {
-        const today = new Date().toISOString().split("T")[0]
-        return [`before:${today}`, "before:2024-12-31", "before:2025"]
-      }
-
-      return []
-    }
-
-    function prefixOptions(options: string[]) {
-      return options.map((option) =>
-        input.substring(0, input.length - lastWord.length) + option
-      )
-    }
-
-    return prefixOptions(computeOptions())
+    return TodoSearchManager.getAutocompleteOptions(searchInput)
   }, [searchInput])
 
-  const handleAutocompleteSelect = (value: string) => {
-    const words = searchInput.split(/\s+/)
-    words[words.length - 1] = value
-    setSearchInput(words.join(" ") + " ")
-  }
+  const isSearching = TodoSearchManager.isSearching(searchInput)
+  const hasSearchOperators = TodoSearchManager.hasSearchOperators(searchInput)
+  const showChart = TodoSearchManager.isDefaultSearch(searchInput)
+  const hasIdFilter = TodoSearchManager.hasIdFilter(searchInput)
+  const selectedTodoId = TodoSearchManager.extractIdFromFilter(searchInput)
 
   if (isLoading || !todos) {
     return (
@@ -227,32 +249,30 @@ export default function Home() {
     )
   }
 
+  const handleAutocompleteSelect = (value: string) => {
+    const newValue = TodoSearchManager.handleAutocompleteSelect(searchInput, value)
+    setSearchInput(newValue)
+  }
+
+  const handleChartBarClick = (date: string) => {
+    const nextDayStr = moment(date).add(1, 'day').format('YYYY-MM-DD')
+    setSearchInput(`before:${nextDayStr} after:${date} is:closed`)
+  }
+
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="xl">
-        <Card padding="lg" radius="md" withBorder>
-          <Title order={3} mb="md">Completion Chart (Last 7 Days)</Title>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a"/>
-              <XAxis dataKey="date" stroke="#71717a"/>
-              <YAxis stroke="#71717a"/>
-              <Tooltip
-                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a" }}
-                labelStyle={{ color: "#fafafa" }}
-              />
-              <Bar dataKey="count" fill="#22c55e"/>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+    <Container size="xl" py="xl" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", ...(hasIdFilter ? {} : { height: "100vh" }) }}>
+      <Stack gap="xl" style={{ ...(hasIdFilter ? {} : { flex: 1, minHeight: 0 }) }}>
+        <div style={{ display: showChart && !hasIdFilter ? "block" : "none" }}>
+          <CompletionChart onBarClick={handleChartBarClick}/>
+        </div>
 
         <Card padding="lg" radius="md" withBorder>
           <Stack gap="md">
             <Group gap="md">
               <Autocomplete
-                placeholder="New or search (status:open priority:high title:buy before:2023 after: comment: description:)"
+                placeholder="New or search (is:open is:closed sort:!created,priority status: priority: title: before: after: comment: description:)"
                 value={searchInput}
-                onChange={setSearchInput}
+                onChange={it => setSearchInput(it)}
                 onOptionSubmit={handleAutocompleteSelect}
                 filter={it => it.options}
                 data={autocompleteOptions || []}
@@ -283,79 +303,24 @@ export default function Home() {
                 </Button>
               )}
             </Group>
-            {!isSearching && (
-              <Switch
-                label="Show completed todos"
-                checked={showCompleted}
-                onChange={(event) => setShowCompleted(event.currentTarget.checked)}
-              />
-            )}
           </Stack>
         </Card>
 
-        <Stack gap="md">
-          {filteredTodos.map((todo) => (
-            <Card
-              key={todo.id}
-              padding="lg"
-              radius="md"
-              withBorder
-              style={{ cursor: "pointer" }}
-            >
-              <Group justify="space-between" wrap="nowrap">
-                <Stack gap="xs" style={{ flex: 1 }} onClick={() => router.push(`/todos/${todo.id}`)}>
-                  <Text size="lg" fw={500}>{todo.title}</Text>
-                  {todo.description && (
-                    <Text size="sm" c="dimmed" lineClamp={1}>{todo.description}</Text>
-                  )}
-                  {todo.need_by_date && (
-                    <Text size="xs" c="dimmed">
-                      Due: {dayjs(todo.need_by_date).format("MMM D, YYYY")}
-                    </Text>
-                  )}
-                </Stack>
-                <Group gap="sm" wrap="nowrap">
-                  <Select
-                    value={todo.priority}
-                    onChange={(value) => updateTodoPriority(todo.id, value as TodoPriority)}
-                    data={[
-                      { value: "Low", label: "Low" },
-                      { value: "Medium", label: "Medium" },
-                      { value: "High", label: "High" },
-                      { value: "Critical", label: "Critical" },
-                    ]}
-                    renderOption={({ option }) => (
-                      <Badge color={priorityColors[option.value as TodoPriority]} fullWidth>
-                        {option.label}
-                      </Badge>
-                    )}
-                    styles={{
-                      input: {
-                        fontWeight: 500,
-                        color: `var(--mantine-color-${priorityColors[todo.priority]}-6)`,
-                      }
-                    }}
-                    style={{ width: 120 }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <Select
-                    value={todo.status}
-                    onChange={(value) => updateTodoStatus(todo.id, value as TodoStatus)}
-                    data={[
-                      { value: "Created", label: "Created" },
-                      { value: "Pending", label: "Pending" },
-                      { value: "Work in progress", label: "Work in progress" },
-                      { value: "Blocked by", label: "Blocked by" },
-                      { value: "Completed", label: "Completed" },
-                    ]}
-                    style={{ width: 200 }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </Group>
-              </Group>
-            </Card>
-          ))}
-        </Stack>
+        {hasIdFilter && selectedTodoId && (
+          <TodoDetail 
+            todoId={selectedTodoId} 
+            initialTodo={todosById.get(selectedTodoId) || null}
+            onBack={handleBackFromDetail}
+          />
+        )}
+
+        <div style={{ display: hasIdFilter ? "none" : "flex", flex: 1, minHeight: 0 }}>
+          <Virtuoso
+            style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
+            data={filteredAndSortedTodoIds}
+            itemContent={renderTodoItem}
+          />
+        </div>
       </Stack>
     </Container>
   )

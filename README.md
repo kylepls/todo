@@ -33,7 +33,7 @@ See [PRODUCTION.md](./PRODUCTION.md) for production deployment guide.
 - **UI Components**: Mantine UI with custom shadcn theme
 - **Charts**: Recharts for completion visualization
 - **Styling**: CSS Modules with Mantine theming
-- **Date Handling**: dayjs
+- **Date Handling**: moment
 - **Logging**: Pino (structured JSON logging)
 - **Metrics**: prom-client (Prometheus/OpenMetrics)
 
@@ -44,7 +44,7 @@ See [PRODUCTION.md](./PRODUCTION.md) for production deployment guide.
 See DEPENDENCIES.md for the complete installation command:
 
 ```bash
-yarn add @mantine/core @mantine/hooks @mantine/notifications recharts typeorm better-sqlite3 reflect-metadata dayjs
+yarn add @mantine/core @mantine/hooks @mantine/notifications recharts typeorm better-sqlite3 reflect-metadata moment
 ```
 
 ### 2. Configure Environment (Optional)

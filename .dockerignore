@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.cursor
+.gitignore
+*.md
+todos.db
+*.env
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tar.gz
+*.iml
+Dockerfile
+.dockerignore
+build.sh

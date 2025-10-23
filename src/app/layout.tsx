@@ -1,12 +1,12 @@
 import 'reflect-metadata';
+import { Providers } from "@/theme/providers"
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ColorSchemeScript } from '@mantine/core';
-import { Providers } from './providers';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
-import '@/app/styles.css';
+import '@/theme/styles.css';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Todo App",
+  title: "Todo",
   description: "Simple and powerful todo application",
 };
 
@@ -32,6 +32,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <ColorSchemeScript defaultColorScheme="dark" />
+        <title>Todo</title>
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <Providers>
