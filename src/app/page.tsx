@@ -10,14 +10,14 @@ import { parseTodoListDates, parseTodoDates } from "@/utils/dateParser"
 import { Autocomplete, Button, Card, Container, Group, Stack, Text } from "@mantine/core"
 import { modals } from "@mantine/modals"
 import { notifications } from "@mantine/notifications"
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso } from "react-virtuoso"
 import moment from "moment"
+import * as chrono from "chrono-node"
 
 export default function Home() {
   const { todos, setTodos } = useTodos()
   const [isLoading, setIsLoading] = useState(true)
-
   const [searchInput, setSearchInput] = useState("")
 
   const loadData = async () => {
@@ -235,6 +235,27 @@ export default function Home() {
     return TodoSearchManager.getAutocompleteOptions(searchInput)
   }, [searchInput])
 
+  const invalidDateRanges = useMemo(() => {
+    const ranges: Array<{ start: number; end: number }> = []
+    const datePattern = /(after|before):([A-Za-z0-9-]+|".*?")/g
+    let match: RegExpExecArray | null
+
+    while ((match = datePattern.exec(searchInput)) !== null) {
+      const dateString = match[2]
+      const matchStart = match.index
+      const matchEnd = matchStart + match[0].length
+
+      const parsedDate = chrono.parseDate(dateString)
+      const isMomentValid = moment(dateString, ['YYYY', 'YYYY-MM', 'YYYY-MM-DD'], true).isValid()
+
+      if (!parsedDate && !isMomentValid) {
+        ranges.push({ start: matchStart, end: matchEnd })
+      }
+    }
+
+    return ranges
+  }, [searchInput])
+
   const isSearching = TodoSearchManager.isSearching(searchInput)
   const hasSearchOperators = TodoSearchManager.hasSearchOperators(searchInput)
   const showChart = TodoSearchManager.isDefaultSearch(searchInput)
@@ -268,47 +289,63 @@ export default function Home() {
 
         <Card padding="lg" radius="md" withBorder>
           <Stack gap="md">
-            <Group gap="md">
-              <Autocomplete
-                placeholder="New or search (is:open is:closed sort:!created,priority status: priority: title: before: after: comment: description:)"
-                value={searchInput}
-                onChange={it => setSearchInput(it)}
-                onOptionSubmit={handleAutocompleteSelect}
-                filter={it => it.options}
-                data={autocompleteOptions || []}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && autocompleteOptions.length > 0) {
-                    e.preventDefault()
-                    const firstOption = autocompleteOptions[0]
-                    if (firstOption) {
-                      handleAutocompleteSelect(firstOption)
-                    }
-                  }
-                  if (e.key === "Enter" && !hasSearchOperators && isSearching) {
-                    e.preventDefault()
-                    createTodo()
-                  }
-                }}
-                style={{ flex: 1 }}
-                size="md"
-                limit={10}
-                comboboxProps={{
-                  position: "bottom-start",
-                  shadow: "md",
-                }}
-              />
-              {isSearching && !hasSearchOperators && (
-                <Button onClick={createTodo} size="md">
-                  Add Todo
-                </Button>
-              )}
-            </Group>
+            <div style={{ position: 'relative' }}>
+              <Group gap="md">
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <Autocomplete
+                    placeholder="New or search (is:open is:closed sort:!created,priority status: priority: title: before: after: comment: description:)"
+                    value={searchInput}
+                    onChange={it => setSearchInput(it)}
+                    onOptionSubmit={handleAutocompleteSelect}
+                    filter={it => it.options}
+                    data={autocompleteOptions || []}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && autocompleteOptions.length > 0) {
+                        e.preventDefault()
+                        const firstOption = autocompleteOptions[0]
+                        if (firstOption) {
+                          handleAutocompleteSelect(firstOption)
+                        }
+                      }
+                      if (e.key === "Enter" && !hasSearchOperators && isSearching) {
+                        e.preventDefault()
+                        createTodo()
+                      }
+                    }}
+                    style={{ width: '100%' }}
+                    styles={invalidDateRanges.length > 0 ? {
+                      input: {
+                        borderColor: '#fa5252',
+                      }
+                    } : undefined}
+                    size="md"
+                    limit={10}
+                    comboboxProps={{
+                      position: "bottom-start",
+                      shadow: "md",
+                    }}
+                    spellCheck={false}
+                    error={invalidDateRanges.length > 0}
+                  />
+                  {invalidDateRanges.length > 0 && (
+                    <Text size="xs" c="red" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px' }}>
+                      Invalid date format in filter
+                    </Text>
+                  )}
+                </div>
+                {isSearching && !hasSearchOperators && (
+                  <Button onClick={createTodo} size="md">
+                    Add Todo
+                  </Button>
+                )}
+              </Group>
+            </div>
           </Stack>
         </Card>
 
         {hasIdFilter && selectedTodoId && (
-          <TodoDetail 
-            todoId={selectedTodoId} 
+          <TodoDetail
+            todoId={selectedTodoId}
             initialTodo={todosById.get(selectedTodoId) || null}
             onBack={handleBackFromDetail}
           />

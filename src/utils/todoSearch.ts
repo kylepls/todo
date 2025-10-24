@@ -1,5 +1,6 @@
 import { Todo } from "@/lib/entities/Todo"
 import moment from "moment"
+import * as chrono from "chrono-node"
 
 interface SearchOperators {
   id?: string;
@@ -111,17 +112,35 @@ export function searchTodos(todos: Todo[], searchQuery: string): Todo[] {
   }
 
   if (operators.after) {
-    const afterDate = moment(operators.after)
-    filteredTodos = filteredTodos.filter(todo =>
-      moment(todo.created_at).isAfter(afterDate)
-    )
+    let parsedDate = chrono.parseDate(operators.after)
+    if (!parsedDate) {
+      const momentDate = moment(operators.after, ['YYYY', 'YYYY-MM', 'YYYY-MM-DD'], true)
+      if (momentDate.isValid()) {
+        parsedDate = momentDate.toDate()
+      }
+    }
+    if (parsedDate) {
+      const afterDate = moment(parsedDate)
+      filteredTodos = filteredTodos.filter(todo =>
+        moment(todo.created_at).isAfter(afterDate)
+      )
+    }
   }
 
   if (operators.before) {
-    const beforeDate = moment(operators.before)
-    filteredTodos = filteredTodos.filter(todo =>
-      moment(todo.created_at).isBefore(beforeDate)
-    )
+    let parsedDate = chrono.parseDate(operators.before)
+    if (!parsedDate) {
+      const momentDate = moment(operators.before, ['YYYY', 'YYYY-MM', 'YYYY-MM-DD'], true)
+      if (momentDate.isValid()) {
+        parsedDate = momentDate.toDate()
+      }
+    }
+    if (parsedDate) {
+      const beforeDate = moment(parsedDate)
+      filteredTodos = filteredTodos.filter(todo =>
+        moment(todo.created_at).isBefore(beforeDate)
+      )
+    }
   }
 
   if (operators.title !== undefined) {

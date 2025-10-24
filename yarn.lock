@@ -560,6 +560,11 @@ chownr@^1.1.1:
   resolved "https://registry.yarnpkg.com/chownr/-/chownr-1.1.4.tgz#6fc9d7b42d32a583596337666e7d08084da2cc6b"
   integrity sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==
 
+chrono-node@^2.9.0:
+  version "2.9.0"
+  resolved "https://registry.yarnpkg.com/chrono-node/-/chrono-node-2.9.0.tgz#a702016d6ec8f6d835a3ba09c6f842fc76969404"
+  integrity sha512-glI4YY2Jy6JII5l3d5FN6rcrIbKSQqKPhWsIRYPK2IK8Mm4Q1ZZFdYIaDqglUNf7gNwG+kWIzTn0omzzE0VkvQ==
+
 client-only@0.0.1:
   version "0.0.1"
   resolved "https://registry.yarnpkg.com/client-only/-/client-only-0.0.1.tgz#38bba5d403c41ab150bff64a95c85013cf73bca1"

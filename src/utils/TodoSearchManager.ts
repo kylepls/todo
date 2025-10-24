@@ -125,12 +125,24 @@ export class TodoSearchManager {
 
     if (lastWord.startsWith("after:")) {
       const today = moment().format("YYYY-MM-DD")
-      return [`after:${today}`, "after:2024-01-01", "after:2024"]
+      return [
+        `after:${today}`,
+        "after:yesterday",
+        "after:\"last week\"",
+        "after:\"last month\"",
+        "after:2024-01-01"
+      ]
     }
 
     if (lastWord.startsWith("before:")) {
       const today = moment().format("YYYY-MM-DD")
-      return [`before:${today}`, "before:2024-12-31", "before:2025"]
+      return [
+        `before:${today}`,
+        "before:tomorrow",
+        "before:\"next week\"",
+        "before:\"next month\"",
+        "before:2024-12-31"
+      ]
     }
 
     return []
