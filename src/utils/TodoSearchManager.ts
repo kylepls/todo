@@ -2,6 +2,8 @@ import { Todo } from "@/lib/entities/Todo"
 import { searchTodos } from "./todoSearch"
 import moment from "moment"
 
+export const DEFAULT_SEARCH_QUERY = "is:open sort:!created,priority"
+
 export class TodoSearchManager {
   static isSearching(query: string): boolean {
     return query.trim().length > 0
@@ -49,7 +51,7 @@ export class TodoSearchManager {
   }
 
   static isDefaultSearch(query: string): boolean {
-    return query === "is:open sort:created,priority" || query === ''
+    return query === DEFAULT_SEARCH_QUERY || query === ''
   }
 
   private static computeOptions(lastWord: string): string[] {

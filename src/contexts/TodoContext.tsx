@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { Todo } from '@/lib/entities/Todo';
 import { Comment } from '@/lib/entities/Comment';
+import { parseTodoDates } from '@/utils/dateParser';
 
 interface TodoWithComments extends Todo {
   comments?: Comment[];
@@ -27,9 +28,13 @@ export function TodoProvider({ children }: { children: ReactNode }) {
 
   const updateTodoInCache = (id: number, updates: Partial<Todo>) => {
     setTodos(prevTodos =>
-      prevTodos.map(todo =>
-        todo.id === id ? { ...todo, ...updates } : todo
-      )
+      prevTodos.map(todo => {
+        if (todo.id === id) {
+          const updated = { ...todo, ...updates };
+          return parseTodoDates(updated);
+        }
+        return todo;
+      })
     );
   };
 

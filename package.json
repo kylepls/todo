@@ -15,6 +15,7 @@
     "@mantine/modals": "^8.3.5",
     "@mantine/notifications": "^8.3.5",
     "@mantine/spotlight": "^8.3.1",
+    "@tabler/icons-react": "^3.35.0",
     "better-sqlite3": "^12.4.1",
     "chrono-node": "^2.9.0",
     "fuse.js": "^7.1.0",

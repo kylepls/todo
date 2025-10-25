@@ -6,6 +6,7 @@ import "./globals.css";
 import { ColorSchemeScript } from '@mantine/core';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import "@mantine/dates/styles.css"
 import '@/theme/styles.css';
 
 const geistSans = Geist({
