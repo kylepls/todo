@@ -126,22 +126,24 @@ const TodoCardComponent = ({ todo, onStatusChange, onPriorityChange, onNavigate,
               background: var(--mantine-color-gray-8);
           } 
           `}</style>
-          <NativeSelect
-            value={todo.priority}
-            onChange={handlePriorityChange}
-            data={["Low", "Medium", "High", "Critical"]}
-            style={prioritySelectStyle}
-            styles={priorityStyles}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <NativeSelect
-            value={todo.status}
-            onChange={handleStatusChange}
-            data={["Created", "Pending", "Work in progress", "Blocked by", "Completed"]}
-            style={statusSelectStyle}
-            styles={statusStyles}
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
+            <NativeSelect
+              value={todo.priority}
+              onChange={handlePriorityChange}
+              data={["Low", "Medium", "High", "Critical"]}
+              style={prioritySelectStyle}
+              styles={priorityStyles}
+            />
+          </div>
+          <div onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
+            <NativeSelect
+              value={todo.status}
+              onChange={handleStatusChange}
+              data={["Created", "Pending", "Work in progress", "Blocked by", "Completed"]}
+              style={statusSelectStyle}
+              styles={statusStyles}
+            />
+          </div>
           <Popover 
             opened={calendarOpened} 
             onChange={setCalendarOpened}
