@@ -5,9 +5,12 @@ import { TodoCard } from "@/components/TodoCard"
 import { TodoDetail } from "@/components/TodoDetail"
 import { useTodos } from "@/contexts/TodoContext"
 import { Todo, TodoPriority, TodoStatus } from "@/lib/entities/Todo"
-import { TodoSearchManager, DEFAULT_SEARCH_QUERY } from "@/utils/TodoSearchManager"
+import { parseQuery, getAutocompletions } from "@/utils/command-parser"
+import { buildQuery } from "@/utils/query-builder"
+
+const DEFAULT_SEARCH_QUERY = "is:open sort:!created priority"
 import { parseTodoListDates, parseTodoDates } from "@/utils/dateParser"
-import { Autocomplete, Button, Card, Container, Group, Stack, Text } from "@mantine/core"
+import { Autocomplete, Button, Card, Container, Group, Stack, Text, Kbd } from "@mantine/core"
 import { modals } from "@mantine/modals"
 import { notifications } from "@mantine/notifications"
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -36,7 +39,7 @@ export default function Home() {
       setSearchInput(query || DEFAULT_SEARCH_QUERY)
     }
 
-    const handleGlobalEscape = (e: KeyboardEvent) => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault()
         setSearchInput(DEFAULT_SEARCH_QUERY)
@@ -53,13 +56,24 @@ export default function Home() {
           }
         }, 0)
       }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault()
+        if (searchInputRef.current) {
+          const input = searchInputRef.current.querySelector('input')
+          if (input) {
+            input.select()
+            input.focus()
+          }
+        }
+      }
     }
 
     window.addEventListener('popstate', handlePopState)
-    window.addEventListener('keydown', handleGlobalEscape)
+    window.addEventListener('keydown', handleGlobalKeyDown)
     return () => {
       window.removeEventListener('popstate', handlePopState)
-      window.removeEventListener('keydown', handleGlobalEscape)
+      window.removeEventListener('keydown', handleGlobalKeyDown)
     }
   }, [])
 
@@ -89,7 +103,11 @@ export default function Home() {
       return
     }
 
-    const title = searchInput.trim()
+    if (!parsedQuery.create) {
+      return
+    }
+
+    const title = parsedQuery.create.title
     const tempId = -Date.now()
 
     const optimisticTodo: Todo = {
@@ -304,14 +322,14 @@ export default function Home() {
       }
 
       localStorage.removeItem("todos")
-      
+
       notifications.show({
         title: "Todo deleted",
         message: (
           <div>
             The todo has been deleted.{' '}
-            <a 
-              href="#" 
+            <a
+              href="#"
               onClick={(e) => {
                 e.preventDefault()
                 undoDelete()
@@ -383,40 +401,122 @@ export default function Home() {
     )
   }, [todosById, updateTodoStatus, updateTodoPriority, handleNavigate, updateTodoDate, deleteTodo, itemWrapperStyle])
 
-  const filteredAndSortedTodoIds = useMemo(() => {
-    return TodoSearchManager.filterAndSortTodos(todos, searchInput)
-  }, [todos, searchInput])
-
-  const autocompleteOptions = useMemo(() => {
-    return TodoSearchManager.getAutocompleteOptions(searchInput)
+  const parsedQuery = useMemo(() => {
+    try {
+      const parsed = parseQuery(searchInput)
+      return buildQuery(parsed)
+    } catch (error) {
+      return {
+        filter: () => true,
+        actions: null,
+        create: null,
+        sort: null,
+        error: error instanceof Error ? error.message : 'Parse error'
+      }
+    }
   }, [searchInput])
 
-  const invalidDateRanges = useMemo(() => {
-    const ranges: Array<{ start: number; end: number }> = []
+  const filteredAndSortedTodoIds = useMemo(() => {
+    let filtered = todos.filter(parsedQuery.filter)
+
+    if (parsedQuery.sort && parsedQuery.sort.length > 0) {
+      filtered = [...filtered]
+
+      const priorityOrder: Record<string, number> = {
+        "Critical": 0,
+        "High": 1,
+        "Medium": 2,
+        "Low": 3,
+      }
+
+      const statusOrder: Record<string, number> = {
+        "Blocked by": 0,
+        "Work in progress": 1,
+        "Pending": 2,
+        "Created": 3,
+        "Completed": 4,
+      }
+
+      filtered.sort((a, b) => {
+        for (const sortField of parsedQuery.sort!) {
+          const field = sortField.field
+          const multiplier = sortField.reverse ? -1 : 1
+          let comparison = 0
+
+          if (field === 'created') {
+            comparison = a.created_at.getTime() - b.created_at.getTime()
+          } else if (field === 'updated') {
+            comparison = a.updated_at.getTime() - b.updated_at.getTime()
+          } else if (field === 'priority') {
+            comparison = priorityOrder[a.priority] - priorityOrder[b.priority]
+          } else if (field === 'status') {
+            comparison = statusOrder[a.status] - statusOrder[b.status]
+          } else if (field === 'title') {
+            comparison = a.title.toLowerCase().localeCompare(b.title.toLowerCase())
+          }
+
+          if (comparison !== 0) {
+            return comparison * multiplier
+          }
+        }
+        return 0
+      })
+    }
+
+    return filtered.map(t => t.id)
+  }, [todos, parsedQuery])
+
+  const autocompleteOptions = useMemo(() => {
+    try {
+      return getAutocompletions(searchInput, searchInput.length)
+    } catch (error) {
+      return []
+    }
+  }, [searchInput])
+
+  const errorMessage = useMemo(() => {
+    if ('error' in parsedQuery && parsedQuery.error) {
+      return parsedQuery.error
+    }
+
     const datePattern = /(after|before):([A-Za-z0-9-]+|".*?")/g
     let match: RegExpExecArray | null
+    let hasInvalidDate = false
 
     while ((match = datePattern.exec(searchInput)) !== null) {
-      const dateString = match[2]
-      const matchStart = match.index
-      const matchEnd = matchStart + match[0].length
+      const dateString = match[2].replace(/"/g, '')
+
+      let isValid = false
 
       const parsedDate = chrono.parseDate(dateString)
-      const isMomentValid = moment(dateString, ['YYYY', 'YYYY-MM', 'YYYY-MM-DD'], true).isValid()
+      if (parsedDate) {
+        isValid = true
+      } else if (/^\d{4}$/.test(dateString)) {
+        isValid = true
+      } else {
+        const jsDate = new Date(dateString)
+        if (!isNaN(jsDate.getTime())) {
+          isValid = true
+        }
+      }
 
-      if (!parsedDate && !isMomentValid) {
-        ranges.push({ start: matchStart, end: matchEnd })
+      if (!isValid) {
+        hasInvalidDate = true
+        break
       }
     }
 
-    return ranges
-  }, [searchInput])
+    return hasInvalidDate ? 'Invalid date format in filter' : null
+  }, [searchInput, parsedQuery])
 
-  const isSearching = TodoSearchManager.isSearching(searchInput)
-  const hasSearchOperators = TodoSearchManager.hasSearchOperators(searchInput)
-  const showChart = TodoSearchManager.isDefaultSearch(searchInput)
-  const hasIdFilter = TodoSearchManager.hasIdFilter(searchInput)
-  const selectedTodoId = TodoSearchManager.extractIdFromFilter(searchInput)
+  const isSearching = searchInput.trim().length > 0
+  const hasSearchOperators = /status:|priority:|created:|updated:|completed:|title:|comment:|description:|id:|sort:/.test(searchInput)
+  const showChart = searchInput === DEFAULT_SEARCH_QUERY || searchInput === ''
+  const hasIdFilter = /id:\d+/.test(searchInput)
+  const selectedTodoId = useMemo(() => {
+    const match = searchInput.match(/id:(\d+)/)
+    return match ? parseInt(match[1]) : null
+  }, [searchInput])
 
   if (isLoading || !todos) {
     return (
@@ -427,13 +527,31 @@ export default function Home() {
   }
 
   const handleAutocompleteSelect = (value: string) => {
-    const newValue = TodoSearchManager.handleAutocompleteSelect(searchInput, value)
-    setSearchInput(newValue)
+    setSearchInput(value)
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        const input = searchInputRef.current.querySelector('input')
+        if (input) {
+          input.focus()
+          input.setSelectionRange(input.value.length, input.value.length)
+        }
+      }
+    }, 0)
   }
 
-  const handleChartBarClick = (date: string) => {
-    const nextDayStr = moment(date).add(1, 'day').format('YYYY-MM-DD')
-    const newQuery = `before:${nextDayStr} after:${date} is:closed`
+  const handleChartBarClick = (dateString: string) => {
+    const today = moment()
+    const date = moment(dateString)
+
+    let newQuery: string;
+    if (today.isSame(date, 'day')) {
+      newQuery = 'completed:today'
+    } else if (today.subtract(1, 'day').isSame(date, 'day')) {
+      newQuery = 'completed:yesterday'
+    } else {
+      newQuery = `completed:${date.format('dddd').toLowerCase()}`
+    }
+
     setSearchInput(newQuery)
     const url = new URL(window.location.href)
     url.searchParams.set('q', newQuery)
@@ -482,7 +600,7 @@ export default function Home() {
                       }
                     }}
                     style={{ width: '100%' }}
-                    styles={invalidDateRanges.length > 0 ? {
+                    styles={errorMessage ? {
                       input: {
                         borderColor: '#fa5252',
                       }
@@ -494,11 +612,11 @@ export default function Home() {
                       shadow: "md",
                     }}
                     spellCheck={false}
-                    error={invalidDateRanges.length > 0}
+                    error={!!errorMessage}
                   />
-                  {invalidDateRanges.length > 0 && (
+                  {errorMessage && (
                     <Text size="xs" c="red" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px' }}>
-                      Invalid date format in filter
+                      {errorMessage}
                     </Text>
                   )}
                 </div>
@@ -522,10 +640,10 @@ export default function Home() {
 
         <div style={{ display: hasIdFilter ? "none" : "flex", flex: 1, minHeight: 0 }}>
           {filteredAndSortedTodoIds.length === 0 ? (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
               flex: 1,
               color: 'var(--mantine-color-dimmed)'
             }}>
