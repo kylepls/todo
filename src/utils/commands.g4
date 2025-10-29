@@ -1,10 +1,10 @@
 grammar commands;
 
-query: action_query | filter_query | raw_string EOF;
-action_query: filters WS? '>' WS? actions WS?;
+query: (action_query | filter_query | raw_string)? EOF;
+action_query: filters? WS? '>' WS? actions? WS?;
 filter_query: filters WS?;
 
-raw_string: TEXT;
+raw_string: value_token (WS value_token?)*;
 
 actions: assignment (WS assignment)*;
 assignment: (STRING_ATTRIBUTE | DATE_ATTRIBUTE) ':' string;
@@ -15,10 +15,12 @@ filter: string_filter | date_filter | sort_filter;
 sort_filter: SORT ':' sort ( WS sort )* ;
 sort: NOT? (STRING_ATTRIBUTE | DATE_ATTRIBUTE);
 
-date_filter: DATE_ATTRIBUTE ':' NOT? (NULL | ((BEFORE | AFTER) WS?)? string);
+date_filter: DATE_ATTRIBUTE ':' NOT? (NULL | ((BEFORE | AFTER) WS?)? date_value);
 
 string_filter: STRING_ATTRIBUTE ':' NOT? (NULL | string);
-string: quoted_string | TEXT;
+string: quoted_string | (value_token (WS value_token)*);
+date_value: quoted_string | (value_token (WS value_token)*);
+value_token: TEXT | DATE_ATTRIBUTE | STRING_ATTRIBUTE | SORT | BEFORE | AFTER;
 quoted_string: QUOTE quoted_content QUOTE;
 quoted_content: (TEXT | WS)+;
 

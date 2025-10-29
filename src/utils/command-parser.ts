@@ -5,6 +5,7 @@ import {
   AssignmentContext,
   commandsParser,
   Date_filterContext,
+  Date_valueContext,
   Filter_queryContext,
   FilterContext,
   FiltersContext,
@@ -103,7 +104,12 @@ class CommandVisitor extends AbstractParseTreeVisitor<any> implements commandsVi
   }
 
   visitRaw_string(context: Raw_stringContext) {
-    this.createTitle = context.TEXT().text
+    const valueTokens = (context as any).value_token()
+    if (Array.isArray(valueTokens)) {
+      this.createTitle = valueTokens.map((t: any) => t.text).join(" ")
+    } else {
+      this.createTitle = valueTokens.text
+    }
     return null
   }
 
@@ -156,14 +162,14 @@ class CommandVisitor extends AbstractParseTreeVisitor<any> implements commandsVi
       return null
     }
 
-    const stringContext = context.string()
-    if (!stringContext) {
+    const dateValueContext = context.date_value()
+    if (!dateValueContext) {
       throw new Error("Date filter requires a date value or null")
     }
 
     const hasBeforeAfter = context.BEFORE() !== undefined || context.AFTER() !== undefined
     const isAfter = context.AFTER() !== undefined
-    const dateString = this.extractString(stringContext)
+    const dateString = this.extractDateValue(dateValueContext)
 
     let parsedDate = chrono.parseDate(dateString)
 
@@ -223,7 +229,22 @@ class CommandVisitor extends AbstractParseTreeVisitor<any> implements commandsVi
     if (context.quoted_string()) {
       return context.quoted_string()!.accept(this)
     }
-    return context.TEXT()?.text || ""
+    const valueTokens = (context as any).value_token()
+    if (Array.isArray(valueTokens)) {
+      return valueTokens.map((t: any) => t.text).join(" ")
+    }
+    return valueTokens.text
+  }
+
+  visitDate_value(context: Date_valueContext): string {
+    if (context.quoted_string()) {
+      return context.quoted_string()!.accept(this)
+    }
+    const valueTokens = (context as any).value_token()
+    if (Array.isArray(valueTokens)) {
+      return valueTokens.map((t: any) => t.text).join(" ")
+    }
+    return valueTokens.text
   }
 
   visitQuoted_string(context: Quoted_stringContext) {
@@ -239,6 +260,10 @@ class CommandVisitor extends AbstractParseTreeVisitor<any> implements commandsVi
   }
 
   private extractString(context: StringContext): string {
+    return context.accept(this)
+  }
+
+  private extractDateValue(context: Date_valueContext): string {
     return context.accept(this)
   }
 
@@ -684,6 +709,10 @@ function getSuggestionsForContext(context: CompletionContext, text: string): str
           .map(v => `${v} `)
       } else if (context.attribute === "priority") {
         return PRIORITY_VALUES
+          .filter(v => v.toLowerCase().startsWith(actionAfterColon.trim().toLowerCase()))
+          .map(v => `${v} `)
+      } else if (DATE_ATTRIBUTES.includes(context.attribute)) {
+        return DATE_VALUES
           .filter(v => v.toLowerCase().startsWith(actionAfterColon.trim().toLowerCase()))
           .map(v => `${v} `)
       }

@@ -1,4 +1,5 @@
-import { getAutocompletions, parseQuery } from "./command-parser"
+import moment from "moment"
+import { DateFilter, getAutocompletions, parseQuery } from "./command-parser"
 
 describe("parseQuery", () => {
 
@@ -18,10 +19,27 @@ describe("parseQuery", () => {
       expect(result.create).toEqual({ title: "meeting" })
     })
 
+    it("multi word title", () => {
+      const result = parseQuery("another task")
+      expect(result.create).toEqual({ title: "another task" })
+    })
+
     it("should create todo with hyphenated title", () => {
       const result = parseQuery("follow-up")
 
       expect(result.create).toEqual({ title: "follow-up" })
+    })
+
+    it("should create todo with keyword as title", () => {
+      const result = parseQuery("created")
+
+      expect(result.create).toEqual({ title: "created" })
+    })
+
+    it("should create todo with multiple keywords", () => {
+      const result = parseQuery("created status priority")
+
+      expect(result.create).toEqual({ title: "created status priority" })
     })
 
   })
@@ -155,6 +173,23 @@ describe("parseQuery", () => {
       })
     })
 
+    it("should parse relative date like '2 days ago'", () => {
+      const result = parseQuery("created:2 days ago")
+
+      const twoDaysAgo = moment().subtract(2, "days")
+
+      expect(result.filters).toHaveLength(1)
+      const filter = result.filters[0] as DateFilter
+      expect(filter.type).toBe("date")
+      expect(filter.attribute).toBe("created")
+      expect(filter.operator).toBe("exact")
+      expect(filter.negated).toBe(false)
+
+      const parsedDate = moment(filter.date)
+      const diffInSeconds = Math.abs(parsedDate.diff(twoDaysAgo, "seconds"))
+      expect(diffInSeconds).toBeLessThan(2)
+    })
+
   })
 
   describe("multiple filters", () => {
@@ -237,6 +272,31 @@ describe("parseQuery", () => {
       ])
     })
 
+    it("should parse action with multi-word value without quotes", () => {
+      const result = parseQuery("status:Pending > comment:Please work on this")
+
+      expect(result.actions).toEqual([
+        { attribute: "comment", value: "Please work on this" }
+      ])
+    })
+
+    it("should parse action with keyword as value", () => {
+      const result = parseQuery("> status:created")
+
+      expect(result.actions).toEqual([
+        { attribute: "status", value: "created" }
+      ])
+    })
+
+    it("should parse action with multiple keywords as values", () => {
+      const result = parseQuery("> status:created priority:high")
+
+      expect(result.actions).toEqual([
+        { attribute: "status", value: "created" },
+        { attribute: "priority", value: "high" }
+      ])
+    })
+
   })
 
   describe("edge cases", () => {
@@ -307,6 +367,28 @@ describe("parseQuery", () => {
         attribute: "is",
         value: "open",
         negated: true
+      }])
+    })
+
+    it("should parse title with multiple words without quotes", () => {
+      const result = parseQuery("title:Buy milk and eggs")
+
+      expect(result.filters).toEqual([{
+        type: "string",
+        attribute: "title",
+        value: "Buy milk and eggs",
+        negated: false
+      }])
+    })
+
+    it("should parse comment with multiple words without quotes", () => {
+      const result = parseQuery("comment:Please work on this")
+
+      expect(result.filters).toEqual([{
+        type: "string",
+        attribute: "comment",
+        value: "Please work on this",
+        negated: false
       }])
     })
 
@@ -673,6 +755,21 @@ describe("getAutocompletions", () => {
       expect(suggestions).toContain("status:Pending > status:Completed priority:")
       expect(suggestions).toContain("status:Pending > status:Completed title:")
       expect(suggestions).not.toContain(">")
+    })
+
+    it("should suggest date values for needby action", () => {
+      const suggestions = getAutocompletions("id:20 > needby:", 15)
+
+      expect(suggestions).toContain("id:20 > needby:today ")
+      expect(suggestions).toContain("id:20 > needby:tomorrow ")
+      expect(suggestions).toContain("id:20 > needby:yesterday ")
+    })
+
+    it("should filter date values for needby action when typing partial", () => {
+      const suggestions = getAutocompletions("id:20 > needby:tod", 18)
+
+      expect(suggestions).toContain("id:20 > needby:today ")
+      expect(suggestions).not.toContain("id:20 > needby:tomorrow ")
     })
 
   })

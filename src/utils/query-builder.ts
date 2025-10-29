@@ -1,6 +1,8 @@
 import { Comment } from "@/lib/entities/Comment"
 import { Todo } from "@/lib/entities/Todo"
-import { Filter, Action, SortField, ParsedQuery } from "./command-parser"
+import { Action, Filter, ParsedQuery, SortField } from "./command-parser"
+import * as chrono from "chrono-node"
+import moment from "moment"
 
 export type QueryResult = {
   filter: (todo: Todo) => boolean
@@ -38,6 +40,20 @@ function buildStringFilter(
   value: string | null,
   negated: boolean
 ): (todo: Todo) => boolean {
+  if (attribute === "comment") {
+    return (todo: Todo) => {
+      const comments = (todo.comments || []) as Comment[]
+      let matches: boolean
+      if (value === null) {
+        matches = comments.length === 0
+      } else {
+        const matchingComments = comments.filter(it => it.content.toLowerCase().includes(value.toLowerCase()))
+        matches = matchingComments.length > 0
+      }
+      return negated ? !matches : matches
+    }
+  }
+
   if (value === null) {
     return (todo: Todo) => {
       const todoValue = getTodoValue(todo, attribute)
@@ -50,15 +66,6 @@ function buildStringFilter(
     return (todo: Todo) => {
       const isOpen = todo.status !== "Completed"
       const matches = value.toLowerCase() === "open" ? isOpen : !isOpen
-      return negated ? !matches : matches
-    }
-  }
-
-  if (attribute === "comment") {
-    return (todo: Todo) => {
-      const comments = (todo.comments || []) as Comment[]
-      const matchingComments = comments.filter(it => it.content.toLowerCase().includes(value.toLowerCase()))
-      const matches = matchingComments.length > 0
       return negated ? !matches : matches
     }
   }
@@ -144,19 +151,28 @@ function getTodoDateValue(todo: Todo, attribute: string): Date | null {
 }
 
 function buildActions(actions: Action[]): Partial<Todo> {
-  const mapping: Record<string, keyof Todo> = {
+  const mapping: Record<string, keyof Todo | string> = {
     "title": "title",
     "description": "description",
     "status": "status",
     "priority": "priority",
     "needby": "need_by_date",
+    "comment": "comment",
   }
 
-  const result: Partial<Todo> = {}
+  const result: Partial<Todo> & { comment?: string } = {}
   actions.forEach(action => {
     const key = mapping[action.attribute]
     if (key) {
-      result[key] = action.value as any
+      if (key === "comment") {
+        (result as any).comment = action.value
+      } else if (action.attribute === "needby") {
+        const parsedDate = chrono.parseDate(action.value)
+        const date = parsedDate || new Date(action.value)
+        result.need_by_date = moment(date).format('YYYY-MM-DD') as any
+      } else {
+        result[key as keyof Todo] = action.value as any
+      }
     }
   })
 

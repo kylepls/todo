@@ -99,6 +99,20 @@ export function TodoDetail({ todoId, initialTodo, onBack }: TodoDetailProps) {
     }
   }, [todoId])
 
+  useEffect(() => {
+    const contextTodo = contextTodos.find(t => t.id === todoId)
+    if (contextTodo) {
+      setTodo(contextTodo)
+      setTitle(contextTodo.title)
+      setDescription(contextTodo.description || "")
+      setStatus(contextTodo.status)
+      setPriority(contextTodo.priority)
+      setNeedByDate(contextTodo.need_by_date || "")
+      setBlockedById(contextTodo.blocked_by_id ? contextTodo.blocked_by_id.toString() : null)
+      setComments(contextTodo.comments || [])
+    }
+  }, [contextTodos, todoId])
+
   const updateTodo = async (updates: Partial<Todo>) => {
     const previousTodo = todo
     

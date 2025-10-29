@@ -39,6 +39,28 @@ describe("buildQuery", () => {
       expect(result.filter(todo2)).toBe(false)
     })
 
+    it("should build string filter for null comment", () => {
+      const parsed: ParsedQuery = {
+        filters: [
+          { type: "string", attribute: "comment", value: "null", negated: false }
+        ],
+        actions: [],
+        create: null,
+        sort: []
+      }
+
+      const result = buildQuery(parsed)
+      const todo1 = createMockTodo({
+        title: "Test Todo", status: "Work in progress", comments: [<Comment>{
+          content: "test"
+        }]
+      })
+      const todo2 = createMockTodo({ title: "Other" })
+
+      expect(result.filter(todo1)).toBe(false)
+      expect(result.filter(todo2)).toBe(true)
+    })
+
     it("should build string filter for comment", () => {
       const parsed: ParsedQuery = {
         filters: [
@@ -347,6 +369,39 @@ describe("buildQuery", () => {
       const result = buildQuery(parsed)
 
       expect(result.actions).toBeNull()
+    })
+
+    it("should parse date string for needby action", () => {
+      const parsed: ParsedQuery = {
+        filters: [],
+        actions: [
+          { attribute: "needby", value: "2025-12-31" }
+        ],
+        create: null,
+        sort: []
+      }
+
+      const result = buildQuery(parsed)
+
+      expect(result.actions).toHaveProperty("need_by_date")
+      expect(result.actions?.need_by_date).toBe("2025-12-31")
+    })
+
+    it("should parse chrono date for needby action", () => {
+      const parsed: ParsedQuery = {
+        filters: [],
+        actions: [
+          { attribute: "needby", value: "today" }
+        ],
+        create: null,
+        sort: []
+      }
+
+      const result = buildQuery(parsed)
+
+      expect(result.actions).toHaveProperty("need_by_date")
+      expect(typeof result.actions?.need_by_date).toBe("string")
+      expect(result.actions?.need_by_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     })
 
   })

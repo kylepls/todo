@@ -7,6 +7,7 @@ import { useTodos } from "@/contexts/TodoContext"
 import { Todo, TodoPriority, TodoStatus } from "@/lib/entities/Todo"
 import { parseQuery, getAutocompletions } from "@/utils/command-parser"
 import { buildQuery } from "@/utils/query-builder"
+import { buildActionExecutionPlan } from "@/utils/action-executor"
 
 const DEFAULT_SEARCH_QUERY = "is:open sort:!created priority"
 import { parseTodoListDates, parseTodoDates } from "@/utils/dateParser"
@@ -162,6 +163,70 @@ export default function Home() {
         children: (
           <Text size="sm">
             There was an error creating your todo. Please try again.
+          </Text>
+        ),
+      })
+    }
+  }
+
+  const executeAction = async () => {
+    if (!parsedQuery.actions) {
+      return
+    }
+
+    const filteredTodos = todos.filter(parsedQuery.filter)
+    const todoIds = filteredTodos.map(t => t.id)
+
+    if (todoIds.length === 0) {
+      notifications.show({
+        title: "No todos to update",
+        message: "No todos match the filter criteria",
+        color: "yellow",
+      })
+      return
+    }
+
+    const executionPlan = buildActionExecutionPlan(todoIds, parsedQuery.actions)
+
+    const previousTodos = [...todos]
+
+    setTodos(prevTodos => {
+      return prevTodos.map(todo => {
+        const update = executionPlan.todoUpdates.find(u => u.todoId === todo.id)
+        if (update) {
+          return { ...todo, ...update.updates }
+        }
+        return todo
+      })
+    })
+
+    try {
+      const res = await fetch("/api/todos/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(executionPlan),
+      })
+
+      if (!res.ok) {
+        throw new Error(`Failed to execute action: ${res.statusText}`)
+      }
+
+      await loadData()
+
+      const actionCount = executionPlan.todoUpdates.length + executionPlan.commentActions.length
+      notifications.show({
+        title: "Action executed",
+        message: `Successfully executed action on ${todoIds.length} todo${todoIds.length !== 1 ? 's' : ''}`,
+        color: "green",
+      })
+    } catch (error) {
+      setTodos(previousTodos)
+
+      modals.open({
+        title: "Failed to execute action",
+        children: (
+          <Text size="sm">
+            There was an error executing the action. Please try again.
           </Text>
         ),
       })
@@ -416,10 +481,25 @@ export default function Home() {
     }
   }, [searchInput])
 
-  const filteredAndSortedTodoIds = useMemo(() => {
-    let filtered = todos.filter(parsedQuery.filter)
+  const lastValidQueryRef = useRef(parsedQuery)
 
-    if (parsedQuery.sort && parsedQuery.sort.length > 0) {
+  useEffect(() => {
+    if (!('error' in parsedQuery)) {
+      lastValidQueryRef.current = parsedQuery
+    }
+  }, [parsedQuery])
+
+  const activeQuery = useMemo(() => {
+    if ('error' in parsedQuery && parsedQuery.error) {
+      return lastValidQueryRef.current
+    }
+    return parsedQuery
+  }, [parsedQuery])
+
+  const filteredAndSortedTodoIds = useMemo(() => {
+    let filtered = todos.filter(activeQuery.filter)
+
+    if (activeQuery.sort && activeQuery.sort.length > 0) {
       filtered = [...filtered]
 
       const priorityOrder: Record<string, number> = {
@@ -438,7 +518,7 @@ export default function Home() {
       }
 
       filtered.sort((a, b) => {
-        for (const sortField of parsedQuery.sort!) {
+        for (const sortField of activeQuery.sort!) {
           const field = sortField.field
           const multiplier = sortField.reverse ? -1 : 1
           let comparison = 0
@@ -464,7 +544,7 @@ export default function Home() {
     }
 
     return filtered.map(t => t.id)
-  }, [todos, parsedQuery])
+  }, [todos, activeQuery])
 
   const autocompleteOptions = useMemo(() => {
     try {
@@ -511,12 +591,33 @@ export default function Home() {
 
   const isSearching = searchInput.trim().length > 0
   const hasSearchOperators = /status:|priority:|created:|updated:|completed:|title:|comment:|description:|id:|sort:/.test(searchInput)
+  const hasActionOperator = searchInput.includes('>')
   const showChart = searchInput === DEFAULT_SEARCH_QUERY || searchInput === ''
   const hasIdFilter = /id:\d+/.test(searchInput)
   const selectedTodoId = useMemo(() => {
     const match = searchInput.match(/id:(\d+)/)
     return match ? parseInt(match[1]) : null
   }, [searchInput])
+
+  const showDetailView = useMemo(() => {
+    if (hasIdFilter && selectedTodoId && todosById.get(selectedTodoId)) {
+      return true
+    }
+    if (filteredAndSortedTodoIds.length === 1 && !hasIdFilter) {
+      return true
+    }
+    return false
+  }, [hasIdFilter, selectedTodoId, todosById, filteredAndSortedTodoIds])
+
+  const detailTodoId = useMemo(() => {
+    if (hasIdFilter && selectedTodoId) {
+      return selectedTodoId
+    }
+    if (filteredAndSortedTodoIds.length === 1) {
+      return filteredAndSortedTodoIds[0]
+    }
+    return null
+  }, [hasIdFilter, selectedTodoId, filteredAndSortedTodoIds])
 
   if (isLoading || !todos) {
     return (
@@ -559,9 +660,9 @@ export default function Home() {
   }
 
   return (
-    <Container size="xl" py="xl" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", ...(hasIdFilter ? {} : { height: "100vh" }) }}>
-      <Stack gap="xl" style={{ ...(hasIdFilter ? {} : { flex: 1, minHeight: 0 }) }}>
-        <div style={{ display: showChart && !hasIdFilter ? "block" : "none" }}>
+    <Container size="xl" py="xl" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", ...(showDetailView ? {} : { height: "100vh" }) }}>
+      <Stack gap="xl" style={{ ...(showDetailView ? {} : { flex: 1, minHeight: 0 }) }}>
+        <div style={{ display: showChart && !showDetailView ? "block" : "none" }}>
           <CompletionChart onBarClick={handleChartBarClick}/>
         </div>
 
@@ -594,15 +695,25 @@ export default function Home() {
                           handleAutocompleteSelect(firstOption)
                         }
                       }
-                      if (e.key === "Enter" && !hasSearchOperators && isSearching) {
-                        e.preventDefault()
-                        createTodo()
+                      if (e.key === "Enter") {
+                        if (hasActionOperator && parsedQuery.actions && !errorMessage) {
+                          e.preventDefault()
+                          executeAction()
+                        } else if (!hasSearchOperators && isSearching) {
+                          e.preventDefault()
+                          createTodo()
+                        }
                       }
                     }}
                     style={{ width: '100%' }}
                     styles={errorMessage ? {
                       input: {
                         borderColor: '#fa5252',
+                      }
+                    } : hasActionOperator && parsedQuery.actions ? {
+                      input: {
+                        borderColor: 'var(--mantine-color-blue-5)',
+                        borderWidth: '2px',
                       }
                     } : undefined}
                     size="md"
@@ -619,10 +730,20 @@ export default function Home() {
                       {errorMessage}
                     </Text>
                   )}
+                  {hasActionOperator && parsedQuery.actions && !errorMessage && (
+                    <Text size="xs" c="blue" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px' }}>
+                      Action will be executed on {filteredAndSortedTodoIds.length} todo{filteredAndSortedTodoIds.length !== 1 ? 's' : ''}
+                    </Text>
+                  )}
                 </div>
                 {isSearching && !hasSearchOperators && (
                   <Button onClick={createTodo} size="md">
                     Add Todo
+                  </Button>
+                )}
+                {hasActionOperator && parsedQuery.actions && !errorMessage && (
+                  <Button onClick={executeAction} size="md" color="blue">
+                    Execute Action
                   </Button>
                 )}
               </Group>
@@ -630,15 +751,15 @@ export default function Home() {
           </Stack>
         </Card>
 
-        {hasIdFilter && selectedTodoId && (
+        {showDetailView && detailTodoId && (
           <TodoDetail
-            todoId={selectedTodoId}
-            initialTodo={todosById.get(selectedTodoId) || null}
+            todoId={detailTodoId}
+            initialTodo={todosById.get(detailTodoId) || null}
             onBack={handleBackFromDetail}
           />
         )}
 
-        <div style={{ display: hasIdFilter ? "none" : "flex", flex: 1, minHeight: 0 }}>
+        <div style={{ display: showDetailView ? "none" : "flex", flex: 1, minHeight: 0 }}>
           {filteredAndSortedTodoIds.length === 0 ? (
             <div style={{
               display: 'flex',
