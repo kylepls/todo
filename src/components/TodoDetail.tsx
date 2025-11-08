@@ -10,6 +10,7 @@ import { notifications } from "@mantine/notifications"
 import moment from "moment"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import { MarkdownContent } from "@/components/MarkdownContent"
 
 const priorityColors: Record<TodoPriority, string> = {
   "Low": "var(--mantine-color-gray-6)",
@@ -45,6 +46,7 @@ export function TodoDetail({ todoId, initialTodo, onBack }: TodoDetailProps) {
   const [priority, setPriority] = useState<TodoPriority>(initialTodo?.priority || "Medium")
   const [needByDate, setNeedByDate] = useState(initialTodo?.need_by_date || "")
   const [blockedById, setBlockedById] = useState<string | null>(initialTodo?.blocked_by_id ? initialTodo.blocked_by_id.toString() : null)
+  const [isEditingDescription, setIsEditingDescription] = useState(false)
 
   const priorityStyles = useMemo(() => ({
     input: {
@@ -363,14 +365,41 @@ export function TodoDetail({ todoId, initialTodo, onBack }: TodoDetailProps) {
               size="md"
             />
 
-            <Textarea
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => updateTodo({ description })}
-              minRows={4}
-              size="md"
-            />
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>Description</Text>
+              {isEditingDescription ? (
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => {
+                    setIsEditingDescription(false)
+                    updateTodo({ description })
+                  }}
+                  minRows={4}
+                  size="md"
+                  placeholder="Supports Markdown formatting"
+                  autoFocus
+                />
+              ) : (
+                <Card 
+                  padding="md" 
+                  radius={0}
+                  withBorder 
+                  style={{ 
+                    cursor: "pointer",
+                    minHeight: "100px",
+                    backgroundColor: "var(--mantine-color-dark-8)"
+                  }}
+                  onClick={() => setIsEditingDescription(true)}
+                >
+                  {description ? (
+                    <MarkdownContent content={description} />
+                  ) : (
+                    <Text c="dimmed" size="sm">Click to add a description (supports Markdown)</Text>
+                  )}
+                </Card>
+              )}
+            </Stack>
 
             <Group grow>
               <Select

@@ -4,6 +4,7 @@ import { Comment } from "@/lib/entities/Comment"
 import { Button, Card, Group, Stack, Text, Textarea } from "@mantine/core"
 import moment from "moment"
 import { useState } from "react"
+import { MarkdownContent } from "@/components/MarkdownContent"
 
 interface CommentItemProps {
   comment: Comment;
@@ -44,6 +45,7 @@ export function CommentItem({ comment, onUpdate, onDelete }: CommentItemProps) {
             }}
             minRows={2}
             autoFocus
+            placeholder="Supports Markdown formatting"
           />
           <Group justify="space-between">
             <Text size="xs" c="dimmed">
@@ -61,9 +63,9 @@ export function CommentItem({ comment, onUpdate, onDelete }: CommentItemProps) {
         </Stack>
       ) : (
         <>
-          <Text size="sm" style={{ cursor: "pointer" }} onClick={() => setIsEditing(true)}>
-            {comment.content}
-          </Text>
+          <div style={{ cursor: "pointer", fontSize: "0.875rem" }} onClick={() => setIsEditing(true)}>
+            <MarkdownContent content={comment.content} />
+          </div>
           <Group justify="space-between" mt="xs">
             <Text size="xs" c="dimmed">
               {moment(comment.created_at).format("MMM D, YYYY h:mm A")}

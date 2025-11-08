@@ -4,6 +4,7 @@ import { DatePicker } from "@mantine/dates"
 import { IconCalendar, IconTrash, IconCheck } from "@tabler/icons-react"
 import moment from "moment"
 import React, { useCallback, useMemo, useState } from "react"
+import { MarkdownContent } from "@/components/MarkdownContent"
 
 const cardStyle = {
   cursor: "pointer",
@@ -112,7 +113,9 @@ const TodoCardComponent = ({ todo, onStatusChange, onPriorityChange, onNavigate,
         <Stack gap="xs" style={stackStyle}>
           <Text size="lg" fw={500}>{todo.title}</Text>
           {todo.description && (
-            <Text size="sm" c="dimmed" lineClamp={1}>{todo.description}</Text>
+            <div style={{ fontSize: "0.875rem", color: "var(--mantine-color-dimmed)", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
+              <MarkdownContent content={todo.description} />
+            </div>
           )}
           {todo.need_by_date && (
             <Text size="xs" c="dimmed">
